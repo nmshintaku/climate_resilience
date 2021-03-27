@@ -99,3 +99,34 @@ ggplot() +
   labs(title="SST", x="year", y="month")
 ggsave(paste0(outputdir,'nutty_plot.png'),width = 12,height = 16)
 
+
+# ---- time series plots ----
+yr.mean <- st_apply(r.agg.yr, "year", mean, na.rm=T) # mean of all pixels for each band
+
+yr.mean <-merge(yr.mean)  # merge variables into a dimension
+yr.mean # take a look
+
+yr.mean.avg <- yr.mean %>% 
+                  as.tbl_cube() %>%
+                  group_by(year,attributes) %>%
+                  summarise(val=mean(X,na.rm = T)) %>% 
+                  # summarise_at(c("si10", "tp"), mean, na.rm = TRUE) %>% 
+                  #summarise_at(vars(si10:tp), mean, na.rm = TRUE) %>% 
+                  as.data.frame()
+head(yr.mean.avg)
+
+yr.mean.avg <- yr.mean.avg %>% 
+  ungroup() %>% 
+  group_by(attributes) %>% 
+  mutate(avg=mean(val),sd.val=sd(val))
+yr.mean.avg
+
+ggplot(yr.mean.avg, aes(x=year, y=val)) +
+  geom_point(size=2, shape=23) +
+  geom_line()+
+  facet_wrap(.~attributes, scales = "free_y") +
+  geom_line(aes(y=avg), linetype="dashed", col="blue") +
+  geom_smooth(method=lm, se=T, 
+              color="darkred") +
+  theme_classic()
+ggsave(paste0(outputdir,'time_series.png'),width = 10,height = 7)
