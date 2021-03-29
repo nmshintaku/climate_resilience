@@ -38,13 +38,13 @@ r.sub <- r.agg.all.yrs[,wanted.yrs,,]
 
 #Sample plot
 ggplot() + 
-  geom_stars(data=select(r.sub,si10)) +
+  geom_stars(data=select(r.sub,sst)) +
   coord_equal() +
   facet_wrap(.~year) +
   scale_fill_viridis(option="D") +
   theme_void() +
   geom_sf(data = indonesia, fill = "gray95") +
-  labs(title="Si10")
+  labs(title="sst")
 
 # --- Monthly anomalies ----
 # get time values
@@ -53,6 +53,7 @@ month.val <- seq(1,length(time.val),12) # pull out the Januarys
 month.val
 yr.time.val <- unique(year(st_get_dimension_values(r, "time"))) # get time values in years
 
+# example
 r.jan <- r[,,,month.val]
 st_get_dimension_values(r.jan, "time") # see if it worked
 
@@ -67,7 +68,7 @@ r.jan.sub <- r.jan[,wanted.yrs,,]
 
 #Sample plot
 ggplot() + 
-  geom_stars(data=select(r.jan.sub,si10)) +
+  geom_stars(data=select(r.jan.sub,tp)) +
   coord_equal() +
   facet_wrap(.~month) +
   scale_fill_viridis_c(option = "D")+
@@ -76,7 +77,7 @@ ggplot() +
   labs(title="Si10 - January")
 
 
-# write a function to do the other months
+# write a function to do the other months (for loop)
 comb.sub <- r.jan.sub
 for (i in 1:11){
   print(i)
@@ -130,3 +131,5 @@ ggplot(yr.mean.avg, aes(x=year, y=val)) +
               color="darkred") +
   theme_classic()
 ggsave(paste0(outputdir,'time_series.png'),width = 10,height = 7)
+
+
