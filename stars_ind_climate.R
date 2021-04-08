@@ -1,14 +1,20 @@
 #install.packages('pacman') # run once
+#install.packages('regeos')
+library(rgeos)
 
 # load packages and set directories
 pacman::p_load(rnaturalearth,stars,cubelyr, viridis,lubridate,ggthemes,tidyverse)
-pcdir <- "R:/Gill/research/climate-resilience"
-inputdir <- paste0(pcdir, "/Indonesia_NS/Data/")
-outputdir <- paste0(pcdir, "/Indonesia_NS/Data/")
+#pcdir <- "R:/Gill/research/climate-resilience"
+#inputdir <- paste0(pcdir, "/Indonesia_NS/Data/")
+#outputdir <- paste0(pcdir, "/Indonesia_NS/Data/")
+inputdir <- "/Volumes/research/climate-resilience/Indonesia_NS/Data/"
+outputdir <- "/Volumes/research/climate-resilience/Indonesia_NS/"
+inputdir <- "/Desktop/Indonesia_climate/climate_resilience/"
 
 # --- read in data ----
 #list.files(inputdir)
 r = read_stars(paste0(inputdir,"1979-2020_allvariables.nc"))
+r_shww = read_stars("1979-2020_shww.nc")
 indonesia <- ne_countries(scale = 110, country = 'indonesia',returnclass = "sf") %>% 
   st_crop(st_bbox(r))
 plot(st_geometry(indonesia))
@@ -36,9 +42,29 @@ r.agg.all.yrs <- st_set_dimensions(r.agg.all.yrs, "fn_anom", values = yr.time.va
 wanted.yrs <- which(yr.time.val%in%c(2009:2019))
 r.sub <- r.agg.all.yrs[,wanted.yrs,,] 
 
-#Sample plot
+#Sample plot SST
 ggplot() + 
   geom_stars(data=select(r.sub,sst)) +
+  coord_equal() +
+  facet_wrap(.~year) +
+  scale_fill_viridis(option="D") +
+  theme_void() +
+  geom_sf(data = indonesia, fill = "gray95") +
+  labs(title="sst")
+
+#Sample plot of shww from separate file
+ggplot() + 
+  geom_stars(data=select(r.sub,X1979.2020_shww.nc)) +
+  coord_equal() +
+  facet_wrap(.~year) +
+  scale_fill_viridis(option="D") +
+  theme_void() +
+  geom_sf(data = indonesia, fill = "gray95") +
+  labs(title="shww")
+
+#Sample plot Total precip
+ggplot() + 
+  geom_stars(data=select(r.sub,tp)) +
   coord_equal() +
   facet_wrap(.~year) +
   scale_fill_viridis(option="D") +
@@ -63,12 +89,12 @@ r.jan <- st_apply(r[,,,month.val], 1:2, fn_anom) # calculate the anomaly over al
 r.jan <- st_set_dimensions(r.jan, "fn_anom", values = paste0("1-", yr.time.val), names = "month") # rename values and band
 
 # Subset to 2009-2019 data
-wanted.yrs <- which(yr.time.val%in%c(2009:2019))
+wanted.yrs <- which(yr.time.val%in%c(2010:2020))
 r.jan.sub <- r.jan[,wanted.yrs,,] 
 
 #Sample plot
 ggplot() + 
-  geom_stars(data=select(r.jan.sub,tp)) +
+  geom_stars(data=select(r.jan.sub,si10)) +
   coord_equal() +
   facet_wrap(.~month) +
   scale_fill_viridis_c(option = "D")+
@@ -89,7 +115,7 @@ for (i in 1:11){
 
 st_get_dimension_values(comb.sub, "month")
 
-#Sample plot
+#Sample plot SST
 ggplot() + 
   geom_stars(data=select(comb.sub,sst)) +
   coord_equal() +
@@ -98,8 +124,61 @@ ggplot() +
   theme_void() +
   geom_sf(data = indonesia, fill = "gray95") +
   labs(title="SST", x="year", y="month")
-ggsave(paste0(outputdir,'nutty_plot.png'),width = 12,height = 16)
+ggsave(paste0(outputdir,'STT_monthly.png'),width = 12,height = 16)
 
+#Plots for other variables
+ggplot() + 
+  geom_stars(data=select(comb.sub, tp)) +
+  coord_equal() +
+  facet_wrap(.~month, ncol = 11) +
+  scale_fill_viridis_c(option = "D")+
+  theme_void() +
+  geom_sf(data = indonesia, fill = "gray95") +
+  labs(title="Leaf Area Index", x="year", y="month")
+ggsave(paste0(outputdir,'precip_month.png'),width = 12,height = 16)
+
+#Process wind wave height separately
+r_shww = read_stars("1979-2020_shww.nc")
+# get time values
+time.val <- st_get_dimension_values(r_shww, "time") # get time stamps
+month.val <- seq(1,length(time.val),12) # pull out the Januarys
+month.val
+yr.time.val <- unique(year(st_get_dimension_values(r_shww, "time"))) # get time values in years
+
+# example
+r.jan <- r[,,,month.val]
+st_get_dimension_values(r.jan, "time") # see if it worked
+
+# Anomaly function
+fn_anom <-  function(x) ((x-mean(x, na.rm=T))/sd(x,na.rm=T)) # function to use
+r.jan <- st_apply(r_shww[,,,month.val], 1:2, fn_anom) # calculate the anomaly over all years
+r.jan <- st_set_dimensions(r.jan, "fn_anom", values = paste0("1-", yr.time.val), names = "month") # rename values and band
+
+# Subset to 2009-2019 data
+wanted.yrs <- which(yr.time.val%in%c(2010:2020))
+r.jan.sub <- r.jan[,wanted.yrs,,] 
+
+# write a function to do the other months (for loop)
+comb.sub <- r.jan.sub
+for (i in 1:11){
+  print(i)
+  dat <- st_apply(r_shww[,,,month.val + i], 1:2, fn_anom) # calculate the anomaly over all years
+  dat <- st_set_dimensions(dat, "fn_anom", values =  paste0(i+ 1,"-", yr.time.val), names = "month-year") # convert date to years
+  dat <- dat[,wanted.yrs,,] 
+  comb.sub <- c(comb.sub,dat, along = 1)
+} 
+
+st_get_dimension_values(comb.sub, "month")
+#plot shww
+ggplot() + 
+  geom_stars(data=comb.sub) +
+  coord_equal() +
+  facet_wrap(.~month, ncol = 11) +
+  scale_fill_viridis_c(option = "D")+
+  theme_void() +
+  geom_sf(data = indonesia, fill = "gray95") +
+  labs(title="Wind Wave Height", x="year", y="month", fill = "shww")
+ggsave(paste0(outputdir,'shww_month.png'),width = 12,height = 16)
 
 # ---- time series plots ----
 yr.mean <- st_apply(r.agg.yr, "year", mean, na.rm=T) # mean of all pixels for each band
@@ -121,6 +200,9 @@ yr.mean.avg <- yr.mean.avg %>%
   group_by(attributes) %>% 
   mutate(avg=mean(val),sd.val=sd(val))
 yr.mean.avg
+
+var_labels <- c("Wind Speed (m/s)", "Air Temp (K)", "Leaf Area Index", "SST (K)","Wind Wave Height (m)",
+               "Precipitation (m)")
 
 ggplot(yr.mean.avg, aes(x=year, y=val)) +
   geom_point(size=2, shape=23) +
