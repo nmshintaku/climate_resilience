@@ -1,6 +1,4 @@
 #install.packages('pacman') # run once
-#install.packages('regeos')
-library(rgeos)
 
 # load packages and set directories
 pacman::p_load(rnaturalearth,stars,cubelyr, viridis,lubridate,ggthemes,tidyverse)
@@ -13,7 +11,8 @@ inputdir <- "/Desktop/Indonesia_climate/climate_resilience/"
 
 # --- read in data ----
 #list.files(inputdir)
-r = read_stars(paste0(inputdir,"1979-2020_allvariables.nc"))
+#r = read_stars(paste0(inputdir,"1979-2020_allvariables.nc"))
+r = read_stars(paste0(inputdir,"allvar_test.nc"))
 r_shww = read_stars("1979-2020_shww.nc")
 indonesia <- ne_countries(scale = 110, country = 'indonesia',returnclass = "sf") %>% 
   st_crop(st_bbox(r))
@@ -30,6 +29,8 @@ yr.time.val
 by_t = "1 year"   # set time intervals
 r.agg.yr <- aggregate(r, by = by_t, FUN = mean) # average values by year
 r.agg.yr <- st_set_dimensions(r.agg.yr, "time", values = yr.time.val, names = "year") # convert date to years
+r.agg.yr <- mutate(r.agg.yr, sst = sst-273.15) #convert SST from Kelvin to C
+r.agg.yr <- mutate(r.agg.yr, t2m = t2m-273.15) #convert airtemp from Kelvin to C
 
 # Anomaly function
 fn_anom <-  function(x) ((x-mean(x, na.rm=T))/sd(x,na.rm=T)) # function to calculate anomalies (in standard deviation units as example)
@@ -45,26 +46,6 @@ r.sub <- r.agg.all.yrs[,wanted.yrs,,]
 #Sample plot SST
 ggplot() + 
   geom_stars(data=select(r.sub,sst)) +
-  coord_equal() +
-  facet_wrap(.~year) +
-  scale_fill_viridis(option="D") +
-  theme_void() +
-  geom_sf(data = indonesia, fill = "gray95") +
-  labs(title="sst")
-
-#Sample plot of shww from separate file
-ggplot() + 
-  geom_stars(data=select(r.sub,X1979.2020_shww.nc)) +
-  coord_equal() +
-  facet_wrap(.~year) +
-  scale_fill_viridis(option="D") +
-  theme_void() +
-  geom_sf(data = indonesia, fill = "gray95") +
-  labs(title="shww")
-
-#Sample plot Total precip
-ggplot() + 
-  geom_stars(data=select(r.sub,tp)) +
   coord_equal() +
   facet_wrap(.~year) +
   scale_fill_viridis(option="D") +
@@ -126,20 +107,40 @@ ggplot() +
   labs(title="SST", x="year", y="month")
 ggsave(paste0(outputdir,'STT_monthly.png'),width = 12,height = 16)
 
-#Plots for other variables
+
+# -----Process wind wave height separately because the all variables file is missing data ---
+r_shww = read_stars("1979-2020_shww.nc")
+#Year values 
+time.val.shww <- st_get_dimension_values(r_shww, "time")
+yr.time.val.shww <- unique(year(st_get_dimension_values(r_shww, "time"))) # get time values in years
+yr.time.val.shww
+
+# Aggregate by year
+by_t = "1 year"   # set time intervals
+r.agg.yr.shww <- aggregate(r_shww, by = by_t, FUN = mean) # average values by year
+r.agg.yr.shww <- st_set_dimensions(r.agg.yr.shww, "time", values = yr.time.val.shww, names = "year") # convert date to years
+
+# Anomaly function
+fn_anom <-  function(x) ((x-mean(x, na.rm=T))/sd(x,na.rm=T)) # function to calculate anomalies (in standard deviation units as example)
+
+# Aggregate over all years
+r.agg.all.yrs.shww <- st_apply(r.agg.yr.shww, 2:3, fn_anom) # calculate the anomaly over all years (1979-2020)
+r.agg.all.yrs.shww <- st_set_dimensions(r.agg.all.yrs.shww, "fn_anom", values = yr.time.val.shww, names = "year") # rename values and band
+
+# Subset to 2009-2019 data
+wanted.yrs <- which(yr.time.val%in%c(2009:2019))
+r.sub.shww <- r.agg.all.yrs.shww[,wanted.yrs,,] 
+
 ggplot() + 
-  geom_stars(data=select(comb.sub, tp)) +
+  geom_stars(data=r.sub.shww) +
   coord_equal() +
-  facet_wrap(.~month, ncol = 11) +
-  scale_fill_viridis_c(option = "D")+
+  facet_wrap(.~year) +
+  scale_fill_viridis(option="D") +
   theme_void() +
   geom_sf(data = indonesia, fill = "gray95") +
-  labs(title="Leaf Area Index", x="year", y="month")
-ggsave(paste0(outputdir,'precip_month.png'),width = 12,height = 16)
+  labs(title="Wave Height")
 
-#Process wind wave height separately
-r_shww = read_stars("1979-2020_shww.nc")
-# get time values
+# Month values
 time.val <- st_get_dimension_values(r_shww, "time") # get time stamps
 month.val <- seq(1,length(time.val),12) # pull out the Januarys
 month.val
@@ -200,9 +201,6 @@ yr.mean.avg <- yr.mean.avg %>%
   group_by(attributes) %>% 
   mutate(avg=mean(val),sd.val=sd(val))
 yr.mean.avg
-
-var_labels <- c("Wind Speed (m/s)", "Air Temp (K)", "Leaf Area Index", "SST (K)","Wind Wave Height (m)",
-               "Precipitation (m)")
 
 ggplot(yr.mean.avg, aes(x=year, y=val)) +
   geom_point(size=2, shape=23) +
